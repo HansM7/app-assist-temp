@@ -6,9 +6,15 @@ export default function Home() {
   const latitudBase = -12.069189999999999;
   const longitudBase = -76.96795260112887;
 
-  const [geolocation, setGeolocation] = useState({
+  const [loading, setLoading] = useState(true);
+  const [geolocation, setGeolocation] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  }>({
     latitude: 0,
     longitude: 0,
+    accuracy: 0,
   });
 
   function calcularDistancia(
@@ -17,7 +23,7 @@ export default function Home() {
     lat2: number,
     lon2: number
   ): number {
-    const R = 6371000; // Radio de la Tierra en metros
+    const R = 6371000;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
@@ -27,20 +33,19 @@ export default function Home() {
         Math.sin(dLon / 2) *
         Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distancia = R * c;
-    return distancia;
+    return R * c;
   }
 
   async function firmar() {
     try {
       const isFirma = window.localStorage.getItem("firma");
       if (isFirma === "1") {
-        alert("Ya estás firmando");
+        alert("Ya firmaste.");
         return;
       }
 
-      if (geolocation.latitude === 0 && geolocation.longitude === 0) {
-        alert("No se pudo obtener tu ubicación. Por favor, intenta de nuevo.");
+      if (geolocation.latitude === 0 || geolocation.accuracy === 0) {
+        alert("Espera a que se cargue tu ubicación con precisión.");
         return;
       }
 
@@ -51,40 +56,67 @@ export default function Home() {
         geolocation.longitude
       );
 
-      if (distancia > 2) {
+      // Nueva lógica: permitir firma si estás dentro del radio de precisión
+      const toleranciaMaxima = Math.max(5, geolocation.accuracy); // mínimo 5m
+
+      if (distancia > toleranciaMaxima) {
         alert(
-          `Estás muy lejos. La distancia es de ${distancia.toFixed(
-            2
-          )} metros. Debes estar a menos de 2 metros de la ubicación base para firmar.`
+          `Estás a ${distancia.toFixed(1)}m del punto. ` +
+            `Precisión GPS: ±${geolocation.accuracy.toFixed(0)}m. ` +
+            `Acércate más o mejora la señal GPS.`
         );
         return;
       }
 
-      console.log(geolocation);
-      console.log(`Distancia: ${distancia.toFixed(2)} metros`);
-
       window.localStorage.setItem("firma", "1");
+      alert("¡Firma registrada con éxito!");
     } catch (error) {
       console.error("Error al firmar:", error);
+      alert("Error inesperado.");
     }
   }
 
-  useEffect(() => {
-    console.log("Entrando al effect!");
+  function capturarUbicacion() {
+    setLoading(true);
 
-    const r = navigator.geolocation.getCurrentPosition(
+    if (!navigator.geolocation) {
+      alert("Tu navegador no soporta geolocalización.");
+      setLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
       (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
         setGeolocation({
-          latitude: latitude,
-          longitude: longitude,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
         });
+        setLoading(false);
       },
       (error) => {
-        console.log(error);
+        console.error("Error GPS:", error);
+        let mensaje = "Error al obtener ubicación.";
+        if (error.code === 1) mensaje = "Permiso de ubicación denegado.";
+        if (error.code === 2) mensaje = "Ubicación no disponible.";
+        if (error.code === 3) mensaje = "Tiempo agotado.";
+        alert(mensaje);
+        setLoading(false);
+      },
+      {
+        enableHighAccuracy: true, // ¡Importante!
+        timeout: 10000,
+        maximumAge: 0,
       }
     );
+  }
+
+  useEffect(() => {
+    capturarUbicacion();
+
+    // Opcional: actualizar cada 10 segundos
+    const interval = setInterval(capturarUbicacion, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -96,22 +128,45 @@ export default function Home() {
               Firmar ahora
             </h1>
             <p className="text-gray-600">
-              Por favor, de clic en el botón para firmar ahora
+              Debes estar cerca del punto base para firmar.
             </p>
           </div>
 
           <div className="space-y-6">
-            <div
-              className="border-2  border-gray-300 rounded-xl p-8 relative hover:border-blue-400 transition-colors cursor-pointer"
+            <button
               onClick={firmar}
+              disabled={loading || geolocation.accuracy === 0}
+              className={`w-full py-4 rounded-xl font-medium transition-all ${
+                loading || geolocation.accuracy === 0
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  : "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
+              }`}
             >
-              <div className="flex flex-col items-center justify-center space-y-4">
-                <p className="text-sm text-gray-500">Haz clic para comenzar</p>
-              </div>
-            </div>
+              {loading ? "Obteniendo ubicación..." : "Firmar ahora"}
+            </button>
           </div>
-          <hr />
-          <div>{JSON.stringify(geolocation)}</div>
+
+          <hr className="my-6" />
+
+          <div className="text-sm text-gray-600 space-y-1">
+            <p>
+              <strong>Ubicación:</strong> {geolocation.latitude.toFixed(6)},{" "}
+              {geolocation.longitude.toFixed(6)}
+            </p>
+            <p>
+              <strong>Precisión GPS:</strong> ±{geolocation.accuracy.toFixed(0)}{" "}
+              metros
+            </p>
+            {geolocation.accuracy > 0 && (
+              <p
+                className={`font-medium ${
+                  geolocation.accuracy > 10 ? "text-red-600" : "text-green-600"
+                }`}
+              >
+                {geolocation.accuracy <= 10 ? "Buena señal" : "Señal débil"}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
