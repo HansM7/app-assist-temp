@@ -1,10 +1,9 @@
 "use client";
-
 import { useEffect, useState } from "react";
 
 export default function Home() {
-  const latitudBase = -12.069189999999999;
-  const longitudBase = -76.96795260112887;
+  const latitudBase = -12.069496;
+  const longitudBase = -76.96734;
 
   const [loading, setLoading] = useState(true);
   const [geolocation, setGeolocation] = useState<{
@@ -49,6 +48,7 @@ export default function Home() {
         return;
       }
 
+      // Usar la precisión del GPS como tolerancia máxima
       const distancia = calcularDistancia(
         latitudBase,
         longitudBase,
@@ -56,10 +56,9 @@ export default function Home() {
         geolocation.longitude
       );
 
-      // Nueva lógica: permitir firma si estás dentro del radio de precisión
-      const toleranciaMaxima = 2; // mínimo 5m
-
-      if (distancia > toleranciaMaxima) {
+      // Validación considerando la precisión del GPS
+      if (distancia > geolocation.accuracy + 2) {
+        // Agregar 2m de tolerancia extra
         alert(
           `Estás a ${distancia.toFixed(1)}m del punto. ` +
             `Precisión GPS: ±${geolocation.accuracy.toFixed(0)}m. ` +
@@ -104,7 +103,7 @@ export default function Home() {
         setLoading(false);
       },
       {
-        enableHighAccuracy: true, // ¡Importante!
+        enableHighAccuracy: true,
         timeout: 10000,
         maximumAge: 0,
       }
@@ -113,8 +112,6 @@ export default function Home() {
 
   useEffect(() => {
     capturarUbicacion();
-
-    // Opcional: actualizar cada 10 segundos
     const interval = setInterval(capturarUbicacion, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -169,6 +166,9 @@ export default function Home() {
           </div>
         </div>
       </div>
+      <button onClick={() => window.localStorage.removeItem("firma")}>
+        Rehacer (dev)
+      </button>
     </div>
   );
 }
