@@ -57,7 +57,7 @@ export default function Home() {
       );
 
       // Nueva lógica: permitir firma si estás dentro del radio de precisión
-      const toleranciaMaxima = Math.max(5, geolocation.accuracy); // mínimo 5m
+      const toleranciaMaxima = 2; // mínimo 5m
 
       if (distancia > toleranciaMaxima) {
         alert(
